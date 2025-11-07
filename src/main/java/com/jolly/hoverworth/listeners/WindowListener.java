@@ -83,18 +83,32 @@ public class WindowListener implements PacketListener, Listener {
                 .anyMatch(line -> PlainTextComponentSerializer.plainText().serialize(line).startsWith("Worth:"));
         if (!hasWorth) {
             String symbol = plugin.getConfig().getString("settings.currency-symbol", "$");
-            int worth = plugin.getWorthFile().get().getInt(item.name().toUpperCase());
+            int worth = plugin.getWorthFile().get().getInt(item.name().toUpperCase() + ".worth");
             Component worthLine = mm.deserialize(plugin.getConfig().getString("settings.lore-message",
                                     "<white>Worth: <gold>{currency-symbol}{worth}<white>/pc")
                             .replace("{currency-symbol}", symbol)
                             .replace("{worth}", String.valueOf(worth)))
                     .decoration(TextDecoration.ITALIC, false);
-
-            lore.add(0, worthLine); // add at top
+            lore.addFirst(worthLine);
             meta.lore(lore);
             bukkitItem.setItemMeta(meta);
         }
-
+        if (!plugin.getWorthFile().get().contains(item.name().toUpperCase() + ".description")) return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
+        String desc = plugin.getWorthFile().get().getString(item.name().toUpperCase() + ".description", "");
+        if (desc.isEmpty()) return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
+        String plainDesc = PlainTextComponentSerializer.plainText().serialize(mm.deserialize(desc)).trim();
+        boolean hasDesc = lore.stream()
+                .map(line -> PlainTextComponentSerializer.plainText().serialize(line).trim())
+                .anyMatch(lineText -> lineText.equalsIgnoreCase(plainDesc));
+        if (!hasDesc) {
+            Component descLine = mm.deserialize(desc);
+            if (!desc.contains("<italic>") && !desc.contains("<i>")) {
+                descLine = descLine.decoration(TextDecoration.ITALIC, false);
+            }
+            lore.addLast(descLine);
+            meta.lore(lore);
+            bukkitItem.setItemMeta(meta);
+        }
         return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
     }
 
@@ -116,7 +130,26 @@ public class WindowListener implements PacketListener, Listener {
                 .decoration(TextDecoration.ITALIC, false);
         lore.removeIf(line -> PlainTextComponentSerializer.plainText().serialize(line).startsWith("Worth:"));
 
-        lore.add(0, worthLine); meta.lore(lore); bukkitItem.setItemMeta(meta); return bukkitItem;
+        lore.addFirst(worthLine);
+        meta.lore(lore);
+        bukkitItem.setItemMeta(meta);
+        if (!plugin.getWorthFile().get().contains(item.name().toUpperCase() + ".description")) return bukkitItem;
+        String desc = plugin.getWorthFile().get().getString(item.name().toUpperCase() + ".description", "");
+        if (desc.isEmpty()) return bukkitItem;
+        String plainDesc = PlainTextComponentSerializer.plainText().serialize(mm.deserialize(desc)).trim();
+        boolean hasDesc = lore.stream()
+                .map(line -> PlainTextComponentSerializer.plainText().serialize(line).trim())
+                .anyMatch(lineText -> lineText.equalsIgnoreCase(plainDesc));
+        if (!hasDesc) {
+            Component descLine = mm.deserialize(desc);
+            if (!desc.contains("<italic>") && !desc.contains("<i>")) {
+                descLine = descLine.decoration(TextDecoration.ITALIC, false);
+            }
+            lore.addLast(descLine);
+            meta.lore(lore);
+            bukkitItem.setItemMeta(meta);
+        }
+        return bukkitItem;
     }
 
 }

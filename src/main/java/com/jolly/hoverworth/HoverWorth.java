@@ -19,6 +19,8 @@ public final class HoverWorth extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        int pluginId = 27893; // <-- Replace with the id of your plugin!
+        Metrics metrics = new Metrics(this, pluginId);
         PacketEvents.getAPI().init();
         worthFile = new WorthFile(this);
         saveDefaultConfig();
