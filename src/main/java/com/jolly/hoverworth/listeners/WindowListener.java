@@ -74,7 +74,6 @@ public class WindowListener implements PacketListener, Listener {
 
         Material item = bukkitItem.getType();
 
-        // Only add lore if item exists in worth.yml
         if (!plugin.getWorthFile().get().contains(item.name())) {
             return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
         }
