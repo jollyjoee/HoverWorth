@@ -20,12 +20,12 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public class WindowListener implements PacketListener, Listener {
     private final HoverWorth plugin;
     private final String symbol;
     MiniMessage mm = MiniMessage.miniMessage();
-
     public WindowListener(HoverWorth plugin) {
         this.plugin = plugin;
         this.symbol = plugin.getConfig().getString("settings.currency-symbol", "$");
@@ -58,7 +58,7 @@ public class WindowListener implements PacketListener, Listener {
     @EventHandler
     public void onInventoryClick(InventoryClickEvent event) {
         org.bukkit.inventory.ItemStack item = event.getCurrentItem();
-        if (item != null && item.getType() == Material.AIR) return;
+        if (item == null || item.getType() == Material.AIR) return;
         //org.bukkit.inventory.ItemStack itemClone = event.getCurrentItem().clone();
         //todo, add dynamic lore based in item amount
         event.setCurrentItem(addLoreBukkit(item));
@@ -69,87 +69,86 @@ public class WindowListener implements PacketListener, Listener {
             return packetItem;
 
         org.bukkit.inventory.ItemStack bukkitItem = SpigotConversionUtil.toBukkitItemStack(packetItem);
-        ItemMeta meta = bukkitItem.getItemMeta();
-        if (meta == null) return packetItem;
-
-        Material item = bukkitItem.getType();
-
-        // Only add lore if item exists in worth.yml
-        if (!plugin.getWorthFile().get().contains(item.name())) {
-            return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
-        }
-        List<Component> lore = meta.lore() != null ? meta.lore() : new ArrayList<>();
-        boolean hasWorth = lore.stream()
-                .anyMatch(line -> PlainTextComponentSerializer.plainText().serialize(line).startsWith("Worth:"));
-        if (!hasWorth) {
-            String symbol = plugin.getConfig().getString("settings.currency-symbol", "$");
-            int worth = plugin.getWorthFile().get().getInt(item.name().toUpperCase() + ".worth");
-            Component worthLine = mm.deserialize(plugin.getConfig().getString("settings.lore-message",
-                                    "<white>Worth: <gold>{currency-symbol}{worth}<white>/pc")
-                            .replace("{currency-symbol}", symbol)
-                            .replace("{worth}", String.valueOf(worth)))
-                    .decoration(TextDecoration.ITALIC, false);
-            lore.addFirst(worthLine);
-            meta.lore(lore);
-            bukkitItem.setItemMeta(meta);
-        }
-        if (!plugin.getWorthFile().get().contains(item.name().toUpperCase() + ".description")) return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
-        String desc = plugin.getWorthFile().get().getString(item.name().toUpperCase() + ".description", "");
-        if (desc.isEmpty()) return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
-        String plainDesc = PlainTextComponentSerializer.plainText().serialize(mm.deserialize(desc)).trim();
-        boolean hasDesc = lore.stream()
-                .map(line -> PlainTextComponentSerializer.plainText().serialize(line).trim())
-                .anyMatch(lineText -> lineText.equalsIgnoreCase(plainDesc));
-        if (!hasDesc) {
-            Component descLine = mm.deserialize(desc);
-            if (!desc.contains("<italic>") && !desc.contains("<i>")) {
-                descLine = descLine.decoration(TextDecoration.ITALIC, false);
-            }
-            lore.addLast(descLine);
-            meta.lore(lore);
-            bukkitItem.setItemMeta(meta);
-        }
-        return SpigotConversionUtil.fromBukkitItemStack(bukkitItem);
+        org.bukkit.inventory.ItemStack updated = addLoreBukkit(bukkitItem);
+        return SpigotConversionUtil.fromBukkitItemStack(updated);
     }
 
     private org.bukkit.inventory.ItemStack addLoreBukkit(org.bukkit.inventory.ItemStack bukkitItem) {
         if (bukkitItem == null || bukkitItem.getType() == Material.AIR)
             return bukkitItem;
-        ItemMeta meta = bukkitItem.getItemMeta();
-        if (meta == null)
-            return bukkitItem;
-        Material item = bukkitItem.getType();
-        if (!plugin.getWorthFile().get().contains(item.name()))
-            return bukkitItem;
-        List<Component> lore = meta.lore() != null ? meta.lore() : new ArrayList<>();
-        int worth = plugin.getWorthFile().get().getInt(item.name().toUpperCase());
-        Component worthLine = mm.deserialize(plugin.getConfig().getString("settings.lore-message",
-                                "<white>Worth: <gold>{currency-symbol}{worth}<white>/pc")
-                        .replace("{currency-symbol}", symbol)
-                        .replace("{worth}", String.valueOf(worth)))
-                .decoration(TextDecoration.ITALIC, false);
-        lore.removeIf(line -> PlainTextComponentSerializer.plainText().serialize(line).startsWith("Worth:"));
 
-        lore.addFirst(worthLine);
+        ItemMeta meta = bukkitItem.getItemMeta();
+        if (meta == null) return bukkitItem;
+
+        Material item = bukkitItem.getType();
+        String itemKey = item.name().toUpperCase();
+
+        String integration = plugin.getConfig().getString("settings.integration", "none");
+        if (!plugin.getWorthFile().get().contains(itemKey) && integration.equals("none"))
+            return bukkitItem;
+
+        List<Component> lore = meta.lore() != null ? meta.lore() : new ArrayList<>();
+        String symbol = plugin.getConfig().getString("settings.currency-symbol", "$");
+        
+        double worth = plugin.getWorthFile().get().getDouble(itemKey + ".worth");
+
+        if (integration.equalsIgnoreCase("EconomyShopGUI")) {
+            Map<Material, Double> esgui = plugin.getEconomyShopGUI().esguiWorths;
+            if (esgui.containsKey(item)) { worth = esgui.get(item); }
+        }
+
+        if (plugin.debug) plugin.getLogger().info(symbol + " " + integration + " " + worth);
+
+        lore = updateWorthLine(lore, worth, symbol);
+
         meta.lore(lore);
         bukkitItem.setItemMeta(meta);
-        if (!plugin.getWorthFile().get().contains(item.name().toUpperCase() + ".description")) return bukkitItem;
-        String desc = plugin.getWorthFile().get().getString(item.name().toUpperCase() + ".description", "");
-        if (desc.isEmpty()) return bukkitItem;
-        String plainDesc = PlainTextComponentSerializer.plainText().serialize(mm.deserialize(desc)).trim();
+
+        addDescriptionLine(meta, lore, itemKey);
+        bukkitItem.setItemMeta(meta);
+
+        return bukkitItem;
+    }
+
+    private List<Component> updateWorthLine(List<Component> lore, double worth, String symbol) {
+        String template = plugin.getConfig().getString(
+                "settings.lore-message",
+                "<white>Worth: <gold>{currency-symbol}{worth}<white>/pc"
+        );
+
+        Component worthLine = mm.deserialize(
+                template.replace("{currency-symbol}", symbol)
+                        .replace("{worth}", String.valueOf(worth))
+        ).decoration(TextDecoration.ITALIC, false);
+
+        lore.removeIf(line -> PlainTextComponentSerializer.plainText()
+                .serialize(line).startsWith("Worth:"));
+
+        lore.addFirst(worthLine);
+        return lore;
+    }
+
+    private void addDescriptionLine(ItemMeta meta, List<Component> lore, String itemKey) {
+        String desc = plugin.getWorthFile().get().getString(itemKey + ".description", "");
+        if (desc.isEmpty()) return;
+
+        String plainDesc = PlainTextComponentSerializer.plainText()
+                .serialize(mm.deserialize(desc)).trim();
+
         boolean hasDesc = lore.stream()
                 .map(line -> PlainTextComponentSerializer.plainText().serialize(line).trim())
                 .anyMatch(lineText -> lineText.equalsIgnoreCase(plainDesc));
-        if (!hasDesc) {
-            Component descLine = mm.deserialize(desc);
-            if (!desc.contains("<italic>") && !desc.contains("<i>")) {
-                descLine = descLine.decoration(TextDecoration.ITALIC, false);
-            }
-            lore.addLast(descLine);
-            meta.lore(lore);
-            bukkitItem.setItemMeta(meta);
+
+        if (hasDesc) return;
+
+        Component descLine = mm.deserialize(desc);
+        if (!desc.contains("<italic>") && !desc.contains("<i>")) {
+            descLine = descLine.decoration(TextDecoration.ITALIC, false);
         }
-        return bukkitItem;
+
+        lore.addLast(descLine);
+        meta.lore(lore);
     }
+
 
 }

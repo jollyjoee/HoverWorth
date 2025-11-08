@@ -3,13 +3,20 @@ package com.jolly.hoverworth;
 import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.PacketListenerPriority;
 import com.jolly.hoverworth.commands.Reload;
+import com.jolly.hoverworth.integrations.EconomyShopGUI;
 import com.jolly.hoverworth.listeners.WindowListener;
 import io.github.retrooper.packetevents.factory.spigot.SpigotPacketEventsBuilder;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.plugin.java.JavaPlugin;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public final class HoverWorth extends JavaPlugin {
     private WorthFile worthFile;
+    private EconomyShopGUI economyShopGUI;
+    public final Boolean debug = getConfig().getBoolean("debug", false);
     @Override
     public void onLoad() {
         PacketEvents.setAPI(SpigotPacketEventsBuilder.build(this));
@@ -21,12 +28,24 @@ public final class HoverWorth extends JavaPlugin {
     public void onEnable() {
         int pluginId = 27893; // <-- Replace with the id of your plugin!
         Metrics metrics = new Metrics(this, pluginId);
+        economyShopGUI = new EconomyShopGUI(this);
         PacketEvents.getAPI().init();
         worthFile = new WorthFile(this);
         saveDefaultConfig();
         this.getCommand("hwreload").setExecutor(new Reload(this));
         Bukkit.getPluginManager().registerEvents(new WindowListener(this), this);
         getLogger().info("HoverWorth enabled ✅");
+        if (getConfig().getString("settings.integration").equalsIgnoreCase("EconomyShopGUI")) {
+            economyShopGUI.loadESGUI();
+            getLogger().info("EconomyShopGUI integration enabled ✅");
+            if (debug) {
+                Map<Material, Double> materials = economyShopGUI.esguiWorths;
+                for (Map.Entry<Material, Double> entry : materials.entrySet()) {
+                    getLogger().info(entry.getKey() + " " + entry.getValue());
+                }
+            }
+            return;
+        }
     }
 
     @Override
@@ -37,4 +56,6 @@ public final class HoverWorth extends JavaPlugin {
     public WorthFile getWorthFile() {
         return worthFile;
     }
+
+    public EconomyShopGUI getEconomyShopGUI() { return  economyShopGUI; }
 }

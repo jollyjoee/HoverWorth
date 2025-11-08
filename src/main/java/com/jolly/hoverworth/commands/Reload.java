@@ -1,6 +1,7 @@
 package com.jolly.hoverworth.commands;
 
 import com.jolly.hoverworth.HoverWorth;
+import com.jolly.hoverworth.integrations.EconomyShopGUI;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -22,6 +23,9 @@ public class Reload implements CommandExecutor {
         }
         plugin.reloadConfig();
         plugin.getWorthFile().reload();
+        if (plugin.getConfig().getString("settings.integration").equalsIgnoreCase("EconomyShopGUI")) {
+            plugin.getEconomyShopGUI().loadESGUI();
+        }
         player.sendMessage(mm.deserialize("<green>Successfully reloaded the HoverWorth configuration."));
         return true;
     }
