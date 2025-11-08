@@ -26,7 +26,7 @@ public final class HoverWorth extends JavaPlugin {
 
     @Override
     public void onEnable() {
-        int pluginId = 27893; // <-- Replace with the id of your plugin!
+        int pluginId = 27893; 
         Metrics metrics = new Metrics(this, pluginId);
         economyShopGUI = new EconomyShopGUI(this);
         PacketEvents.getAPI().init();
